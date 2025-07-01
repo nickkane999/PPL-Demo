@@ -153,10 +153,15 @@ export type UseCMSProps = {
 };
 
 export function getDefaultCMSConfig(): CMSClientConfig {
+  // For Storyblok, use preview token if available (it can access both draft and published)
+  // Otherwise fall back to public token
+  const storyblokToken = process.env.NEXT_PUBLIC_STORYBLOK_PREVIEW_TOKEN || process.env.NEXT_PUBLIC_STORYBLOK_CONTENT_API_ACCESS_TOKEN || "";
+
   return {
     provider: "storyblok",
     storyblok: {
-      accessToken: process.env.NEXT_PUBLIC_STORYBLOK_CONTENT_API_ACCESS_TOKEN || "",
+      accessToken: storyblokToken,
+      spaceId: process.env.NEXT_PUBLIC_STORYBLOK_SPACE_ID || "",
       version: (process.env.NEXT_PUBLIC_STORYBLOK_VERSION as "draft" | "published") || "published",
       region: "us",
     },

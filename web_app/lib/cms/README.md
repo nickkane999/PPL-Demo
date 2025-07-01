@@ -106,6 +106,7 @@ function StoriesPage() {
 
    ```env
    NEXT_PUBLIC_STORYBLOK_CONTENT_API_ACCESS_TOKEN=your_public_token
+   NEXT_PUBLIC_STORYBLOK_SPACE_ID=your_space_id
    STORYBLOK_PREVIEW_TOKEN=your_preview_token
    ```
 
@@ -444,3 +445,49 @@ GET /api/cms/revalidate?secret=debug_secret
 ---
 
 **Ready to build with any CMS!** 🎉
+
+## ⚠️ CRITICAL: Storyblok Token Configuration
+
+### Getting the Correct Tokens
+
+If you're getting **401 Unauthorized** errors from Storyblok, you likely have the wrong type of token. Follow these steps:
+
+1. **Go to your Storyblok space**: https://app.storyblok.com/
+2. **Navigate to**: Settings → Access tokens
+3. **Look for these specific tokens**:
+   - **"Public"** token - for published content
+   - **"Preview"** token - for draft content (optional but recommended)
+
+### ❌ Common Mistake: Wrong Token Type
+
+**DON'T use Management API tokens** - they won't work for reading content!
+
+- ❌ **Management API Token** - Used for creating/editing content programmatically
+- ✅ **Public Token** - Used for reading published content
+- ✅ **Preview Token** - Used for reading draft content (also works for published)
+
+### 📝 Environment Variables
+
+```env
+# Content Delivery API Token (Public) - for published content
+NEXT_PUBLIC_STORYBLOK_CONTENT_API_ACCESS_TOKEN=your_public_token_here
+
+# Preview Token - for draft content (if you have one)
+NEXT_PUBLIC_STORYBLOK_PREVIEW_TOKEN=your_preview_token_here
+
+# Space ID
+NEXT_PUBLIC_STORYBLOK_SPACE_ID=your_space_id_here
+```
+
+### 🔧 Troubleshooting 401 Errors
+
+1. **Check token type**: Ensure you're using Content Delivery API tokens, not Management API tokens
+2. **Verify space access**: Make sure the token has access to your specific space
+3. **Test in Storyblok**: Verify your content exists and is published
+4. **Restart dev server**: After updating environment variables
+
+---
+
+## Overview
+
+This library provides a unified interface for multiple headless CMS providers including Storyblok, Sanity, and Contentful.

@@ -14,15 +14,60 @@ export class StoryblokClient implements UnifiedCMSClient {
 
   private initializeClient() {
     if (!this.isInitialized) {
-      storyblokInit({
-        accessToken: this.config.accessToken,
-        use: [apiPlugin],
-        apiOptions: {
-          region: this.config.region || "us",
-        },
+      console.log("🚀 Initializing Storyblok client with config:", {
+        accessTokenLength: this.config.accessToken?.length,
+        region: this.config.region,
+        version: this.config.version,
+        spaceId: this.config.spaceId,
       });
-      this.api = getStoryblokApi();
+
+      // Create custom API client that directly uses your working URL pattern
+      // Working URL: https://api.storyblok.com/v2/cdn/stories?token=...
+      this.api = {
+        baseURL: "https://api.storyblok.com/v2",
+        get: async (endpoint: string, params: any = {}) => {
+          const searchParams = new URLSearchParams();
+
+          // Add all params to URL
+          Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+              searchParams.append(key, String(value));
+            }
+          });
+
+          // Always add token
+          searchParams.append("token", this.config.accessToken!);
+
+          const url = `${this.api.baseURL}/${endpoint}?${searchParams.toString()}`;
+          console.log("🚀 Direct API request to:", url);
+
+          const response = await fetch(url);
+
+          if (!response.ok) {
+            const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+            (error as any).status = response.status;
+            (error as any).response = { status: response.status, statusText: response.statusText };
+            throw error;
+          }
+
+          const data = await response.json();
+          return {
+            data,
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            total: data.total,
+            config: { url },
+          };
+        },
+      };
+
       this.isInitialized = true;
+      console.log("✅ Custom Storyblok client initialized - using main endpoint directly");
+      console.log("🔧 API instance config:", {
+        baseURL: this.api?.baseURL,
+        customImplementation: true,
+        workingUrlPattern: "https://api.storyblok.com/v2/cdn/stories?token=...",
+      });
     }
   }
 
@@ -63,14 +108,54 @@ export class StoryblokClient implements UnifiedCMSClient {
 
   async getStories(params?: CMSQueryParams): Promise<CMSStoriesResponse<BaseCMSEntry>> {
     try {
-      const response = await this.api.get("cdn/stories", {
+      // Only use Storyblok-compatible parameter names (avoid conflicts)
+      const apiParams: Record<string, any> = {
         version: params?.version || this.config.version || "published",
         page: params?.page || 1,
-        per_page: params?.perPage || 25,
-        starts_with: params?.startsWith,
-        with_tag: params?.tags?.join(","),
-        sort_by: params?.sortBy,
-        ...params,
+        per_page: params?.perPage || 10, // Use per_page, not perPage
+      };
+
+      // Add optional parameters only if they exist (avoid undefined values)
+      if (params?.startsWith) {
+        apiParams.starts_with = params.startsWith;
+      }
+      if (params?.tags?.length) {
+        apiParams.with_tag = params.tags.join(",");
+      }
+      if (params?.sortBy) {
+        apiParams.sort_by = params.sortBy;
+      }
+
+      // Add any additional CV (cache version) parameter if present
+      if (params?.cv) {
+        apiParams.cv = params.cv;
+      }
+
+      // Always use main API endpoint (matches your working URL format)
+      const baseUrl = "https://api.storyblok.com/v2/cdn";
+
+      console.log("📡 Storyblok API request:", {
+        endpoint: "cdn/stories",
+        params: apiParams,
+        accessTokenPresent: !!this.config.accessToken,
+        accessTokenLength: this.config.accessToken?.length,
+        spaceId: this.config.spaceId,
+        baseUrl: baseUrl,
+        note: "Using main endpoint to match your working URL",
+        actualApiInstance: this.api?.constructor?.name || "unknown",
+      });
+
+      // Log the actual request being made
+      console.log("🔍 Making API request to:", `${this.api.baseURL || "unknown"}/cdn/stories`);
+
+      const response = await this.api.get("cdn/stories", apiParams);
+
+      console.log("✅ Storyblok API response:", {
+        storiesCount: response.data.stories?.length || 0,
+        total: response.total,
+        headers: response.headers,
+        status: response.status,
+        actualUrl: response.config?.url || response.request?.responseURL || "unknown",
       });
 
       const stories = response.data.stories.map(this.transformStoryblokEntry);
@@ -89,8 +174,32 @@ export class StoryblokClient implements UnifiedCMSClient {
           hasPrev: currentPage > 1,
         },
       };
-    } catch (error) {
-      console.error("Storyblok getStories error:", error);
+    } catch (error: any) {
+      console.error("❌ Storyblok getStories error:", error);
+      console.error("Error details:", {
+        message: error.message || "Unknown error",
+        status: error.status || error.response?.status,
+        statusText: error.statusText || error.response?.statusText || "",
+        data: error.response?.data || {},
+        url: error.config?.url || error.request?.responseURL || "unknown",
+        baseURL: this.api?.baseURL || "unknown",
+        config: {
+          accessTokenLength: this.config.accessToken?.length,
+          spaceId: this.config.spaceId,
+          version: this.config.version,
+          region: this.config.region,
+        },
+      });
+
+      // Check for specific error types
+      if (error.status === 401 || error.response?.status === 401) {
+        console.error("🚫 401 Unauthorized - Possible causes:");
+        console.error("   • Token might be invalid or expired");
+        console.error("   • Token might not have access to this space");
+        console.error("   • Space might be in a different region");
+        console.error("   • Token might be a Management API token instead of Content Delivery API");
+      }
+
       throw new Error("Failed to fetch stories");
     }
   }
@@ -247,5 +356,34 @@ export class StoryblokClient implements UnifiedCMSClient {
     } catch (error) {
       console.error("Failed to revalidate path:", error);
     }
+  }
+
+  getConfig() {
+    return {
+      provider: this.provider,
+      storyblok: this.config,
+    };
+  }
+
+  getDebugInfo() {
+    // Always use main API endpoint (matches your working URL)
+    const baseUrl = "https://api.storyblok.com/v2";
+
+    return {
+      provider: this.provider,
+      isInitialized: this.isInitialized,
+      config: {
+        hasAccessToken: !!this.config.accessToken,
+        accessTokenLength: this.config.accessToken?.length,
+        region: this.config.region,
+        version: this.config.version,
+        spaceId: this.config.spaceId,
+      },
+      api: {
+        isAvailable: !!this.api,
+        baseUrl: baseUrl,
+        note: "Using main API endpoint (no region) to match your working URL format",
+      },
+    };
   }
 }

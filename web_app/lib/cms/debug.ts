@@ -1,8 +1,14 @@
 export function debugCMSConfig() {
+  const publicToken = process.env.NEXT_PUBLIC_STORYBLOK_CONTENT_API_ACCESS_TOKEN || "";
+  const previewToken = process.env.NEXT_PUBLIC_STORYBLOK_PREVIEW_TOKEN || "";
+  const activeToken = previewToken || publicToken;
+
   const config = {
     storyblok: {
-      accessToken: process.env.NEXT_PUBLIC_STORYBLOK_CONTENT_API_ACCESS_TOKEN || "",
-      spaceId: process.env.STORYBLOK_SPACE_ID || "",
+      publicToken: publicToken,
+      previewToken: previewToken,
+      activeToken: activeToken,
+      spaceId: process.env.NEXT_PUBLIC_STORYBLOK_SPACE_ID || "",
       version: process.env.NEXT_PUBLIC_STORYBLOK_VERSION || "published",
     },
     sanity: {
@@ -19,19 +25,23 @@ export function debugCMSConfig() {
 
   const debug = {
     storyblok: {
-      configured: !!(config.storyblok.accessToken && config.storyblok.accessToken.length > 0),
-      accessTokenLength: config.storyblok.accessToken.length,
+      hasPublicToken: !!publicToken,
+      hasPreviewToken: !!previewToken,
+      hasActiveToken: !!activeToken,
+      activeTokenLength: activeToken.length,
+      tokenType: previewToken ? "preview" : publicToken ? "public" : "none",
       hasSpaceId: !!config.storyblok.spaceId,
       version: config.storyblok.version,
+      configured: !!activeToken && !!config.storyblok.spaceId,
     },
     sanity: {
-      configured: !!(config.sanity.projectId && config.sanity.dataset),
+      configured: !!config.sanity.projectId && !!config.sanity.dataset,
       hasProjectId: !!config.sanity.projectId,
       hasDataset: !!config.sanity.dataset,
       apiVersion: config.sanity.apiVersion,
     },
     contentful: {
-      configured: !!(config.contentful.spaceId && config.contentful.accessToken),
+      configured: !!config.contentful.spaceId && !!config.contentful.accessToken,
       hasSpaceId: !!config.contentful.spaceId,
       hasAccessToken: !!config.contentful.accessToken,
       environment: config.contentful.environment,
@@ -50,8 +60,8 @@ export function logCMSStatus() {
   console.log("  📝 Contentful:", debug.contentful.configured ? "✅ Configured" : "❌ Missing config");
 
   if (debug.storyblok.configured) {
-    console.log(`    • Access token length: ${debug.storyblok.accessTokenLength}`);
-    console.log(`    • Version: ${debug.storyblok.version}`);
+    console.log(`    • Access token length: ${debug.storyblok.activeTokenLength}`);
+    console.log(`    • Token type: ${debug.storyblok.tokenType}`);
   }
 
   return debug;
