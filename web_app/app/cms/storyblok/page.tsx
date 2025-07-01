@@ -3,52 +3,41 @@
 import { useState, useEffect } from "react";
 import { getCMSClient } from "@/lib/cms/factory";
 import { StoryblokClient } from "@/lib/cms/clients/storyblok";
+import { StoryblokStoryRenderer } from "@/components/StoryblokRenderer";
 
 export default function StoryblokPage() {
-  const [config, setConfig] = useState<any>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [connectionTest, setConnectionTest] = useState<string>("Not tested");
   const [stories, setStories] = useState<any[]>([]);
+  const [selectedStory, setSelectedStory] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>("Connecting...");
 
   useEffect(() => {
-    try {
-      console.log("🔧 Getting CMS client and debug info...");
-      const client = getCMSClient() as StoryblokClient;
-      const cmsConfig = client.getConfig();
-      const cmsDebugInfo = client.getDebugInfo();
+    const loadStories = async () => {
+      try {
+        setConnectionStatus("Loading stories...");
+        const client = getCMSClient() as StoryblokClient;
+        const storiesResponse = await client.getStories({
+          version: "published",
+          page: 1,
+          perPage: 10,
+        });
+        setStories(storiesResponse.stories || []);
+        setConnectionStatus("✅ Connected successfully");
 
-      setConfig(cmsConfig);
-      setDebugInfo(cmsDebugInfo);
-
-      console.log("🔧 Storyblok Debug Info:", { config: cmsConfig, debug: cmsDebugInfo });
-
-      // Run basic connection test
-      const testConnection = async () => {
-        try {
-          console.log("🧪 Testing basic connection...");
-          const storiesResponse = await client.getStories({
-            version: "published",
-            page: 1,
-            perPage: 10,
-          });
-          console.log("✅ Basic connection successful:", storiesResponse);
-          setConnectionTest("✅ Connected successfully");
-          setStories(storiesResponse.stories || []);
-        } catch (error: any) {
-          console.error("❌ Basic connection failed:", error);
-          setConnectionTest(`❌ Connection failed: ${error.message}`);
+        // Auto-select the first story (usually the home page)
+        if (storiesResponse.stories && storiesResponse.stories.length > 0) {
+          setSelectedStory(storiesResponse.stories[0]);
         }
-      };
+      } catch (error: any) {
+        console.error("❌ Failed to load stories:", error);
+        setConnectionStatus(`❌ Connection failed: ${error.message}`);
+      }
+    };
 
-      testConnection();
-    } catch (error: any) {
-      console.error("💥 Failed to initialize:", error);
-      setConnectionTest(`💥 Failed to initialize: ${error.message}`);
-    }
+    loadStories();
   }, []);
 
-  const loadStories = async () => {
+  const refreshStories = async () => {
     setIsLoading(true);
     try {
       const client = getCMSClient() as StoryblokClient;
@@ -58,10 +47,15 @@ export default function StoryblokPage() {
         perPage: 10,
       });
       setStories(storiesResponse.stories || []);
-      setConnectionTest("✅ Stories loaded successfully");
+      setConnectionStatus("✅ Stories refreshed successfully");
+
+      // Auto-select first story if none selected
+      if (!selectedStory && storiesResponse.stories && storiesResponse.stories.length > 0) {
+        setSelectedStory(storiesResponse.stories[0]);
+      }
     } catch (error: any) {
-      console.error("❌ Failed to load stories:", error);
-      setConnectionTest(`❌ Failed to load stories: ${error.message}`);
+      console.error("❌ Failed to refresh stories:", error);
+      setConnectionStatus(`❌ Failed to refresh stories: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -69,93 +63,57 @@ export default function StoryblokPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Storyblok CMS Integration</h1>
-
-          {/* Connection Status */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">Connection Status</h2>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-lg">{connectionTest}</p>
+      <div className="max-w-7xl mx-auto px-4">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Storyblok Content</h1>
+              <p className="text-gray-600 mt-1">{connectionStatus}</p>
+            </div>
+            <div className="flex space-x-3">
+              <button onClick={refreshStories} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg">
+                {isLoading ? "Loading..." : "Refresh"}
+              </button>
+              <a href="/cms/storyblok/debug" className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg inline-block">
+                Debug
+              </a>
             </div>
           </div>
+        </div>
 
-          {/* Configuration */}
-          {config && (
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-3">Configuration</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p>
-                    <strong>CMS Provider:</strong> {config.provider}
-                  </p>
-                  <p>
-                    <strong>Region:</strong> {config.storyblok?.region || "us"}
-                  </p>
-                  <p>
-                    <strong>Space ID:</strong> {config.storyblok?.spaceId}
-                  </p>
-                </div>
-                <div>
-                  <p>
-                    <strong>Access Token:</strong> {config.storyblok?.accessToken ? `${config.storyblok.accessToken.substring(0, 8)}...` : "Not set"}
-                  </p>
-                  <p>
-                    <strong>Version:</strong> {config.storyblok?.version || "published"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="mb-6">
-            <button onClick={loadStories} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2 rounded-lg mr-4">
-              {isLoading ? "Loading..." : "Load Stories"}
-            </button>
-            <a href="/cms/storyblok/debug" className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg inline-block">
-              Advanced Diagnostics
-            </a>
-          </div>
-
-          {/* Stories */}
-          {stories.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-3">Stories ({stories.length})</h2>
-              <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Stories Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">Stories ({stories.length})</h2>
+              <div className="space-y-2">
                 {stories.map((story) => (
-                  <div key={story.id} className="p-4 border border-gray-200 rounded-lg">
-                    <h3 className="font-semibold text-lg">{story.title}</h3>
-                    <p className="text-gray-600">Slug: {story.slug}</p>
-                    <p className="text-gray-600">Status: {story.status}</p>
-                    <p className="text-gray-600">Updated: {new Date(story.updatedAt).toLocaleDateString()}</p>
-                  </div>
+                  <button key={story.id} onClick={() => setSelectedStory(story)} className={`w-full text-left p-3 rounded-lg transition-colors ${selectedStory?.id === story.id ? "bg-blue-100 border-blue-300 border" : "bg-gray-50 hover:bg-gray-100 border border-gray-200"}`}>
+                    <div className="font-medium text-gray-900">{story.title}</div>
+                    <div className="text-sm text-gray-500">{story.slug}</div>
+                    <div className="text-xs text-gray-400 mt-1">{story.status}</div>
+                  </button>
                 ))}
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Debug Information */}
-          {debugInfo && (
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-3">Debug Information</h2>
-              <pre className="bg-gray-100 p-4 rounded-lg text-sm overflow-x-auto">{JSON.stringify(debugInfo, null, 2)}</pre>
+          {/* Main Content Area */}
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-lg shadow-md">
+              {selectedStory ? (
+                <div className="p-6">
+                  <StoryblokStoryRenderer story={selectedStory} />
+                </div>
+              ) : (
+                <div className="p-12 text-center">
+                  <div className="text-gray-400 text-6xl mb-4">📄</div>
+                  <h3 className="text-xl font-medium text-gray-600 mb-2">Select a story to view its content</h3>
+                  <p className="text-gray-500">Choose a story from the sidebar to see its rich content rendered here.</p>
+                </div>
+              )}
             </div>
-          )}
-
-          {/* Help */}
-          <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400">
-            <h3 className="font-semibold text-blue-800 mb-2">🔧 Troubleshooting</h3>
-            <p className="text-blue-700 mb-2">If you're having connection issues:</p>
-            <ul className="list-disc list-inside text-blue-700 space-y-1">
-              <li>Check that your tokens are Content Delivery API tokens (not Management API)</li>
-              <li>Ensure your space has published content</li>
-              <li>Try the Advanced Diagnostics for detailed testing</li>
-              <li>
-                Your working URL format: <code>https://api.storyblok.com/v2/cdn/stories?token=...</code>
-              </li>
-            </ul>
           </div>
         </div>
       </div>
